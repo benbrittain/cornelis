@@ -70,16 +70,21 @@ struct PietImg<'a> {
     bytes: &'a [u8],
 }
 
+#[derive(Debug)]
+struct FloodFill {
+    codels: Vec<Codel>,
+    min_x: u32,
+    min_y: u32,
+    max_x: u32,
+    max_y: u32,
+}
+
 impl<'a> PietImg<'a> {
     pub fn new(codel_size: u32, png_info: OutputInfo, bytes: &'a [u8]) -> Self {
         verify_colors(bytes);
 
         // being lazy for now
         assert!(codel_size == 1);
-
-        //// ensure the codel size works with the dimensions of the png
-        //assert!(dims.0 % codel_size == 0);
-        //assert!(dims.1 % codel_size == 0);
 
         PietImg {
             codel_size,
@@ -88,9 +93,13 @@ impl<'a> PietImg<'a> {
         }
     }
 
-    pub fn get_codels_in_block(&self, loc: Codel) -> Vec<Codel> {
+    pub fn get_codels_in_block(&self, loc: Codel) -> FloodFill {
         let mut queue = VecDeque::new();
         let mut seen = vec![];
+        let mut min_y = self.png_info.height;
+        let mut max_y = 0;
+        let mut min_x = self.png_info.width;
+        let mut max_x = 0;
         queue.push_back(loc);
 
         let block_color: PietColor = self[loc].into();
@@ -98,22 +107,32 @@ impl<'a> PietImg<'a> {
 
         while !queue.is_empty() {
             let n = queue.pop_front().unwrap();
-            eprintln!("checking: {:?}", n);
             if seen.contains(&n) {
                 continue;
             }
             let codel_color: PietColor = self[n].into();
-            eprintln!("Codel color {:?} of {:?}", codel_color, n);
             if codel_color != block_color {
                 continue;
             }
+            eprintln!("Codel color {:?} of {:?}", codel_color, n);
 
-            dbg!(&n, codel_color);
+            if n.0 > max_x {
+                max_x = n.0;
+            }
+            if n.1 > max_y {
+                max_y = n.1;
+            }
+            if n.0 < min_x {
+                min_x = n.0;
+            }
+            if n.1 < min_y {
+                min_y = n.0;
+            }
             seen.push(n);
 
             if n.0 > 0 {
                 let left = (n.0 - 1, n.1);
-                if !seen.contains(&left){
+                if !seen.contains(&left) {
                     queue.push_back(left)
                 }
             }
@@ -134,33 +153,47 @@ impl<'a> PietImg<'a> {
             if n.1 < self.png_info.height && !seen.contains(&down) {
                 queue.push_back(down);
             }
-            dbg!(&queue);
-
-
-            //let codel_color: PietColor = self[n].into();
-            //if codel_color == block_color {
-            //    dbg!(&n);
-            //    dbg!(&codel_color);
-            //    if n.0 + 1 < self.png_info.width && !seen.contains(&(n.0 + 1, n.1)) {
-            //        queue.push_back((n.0 + 1, n.1));
-            //    }
-            //    if n.0 > 0 && !seen.contains(&(n.0 - 1, n.1)) {
-            //        queue.push_back((n.0 - 1, n.1));
-            //    }
-            //    if n.1 + 1 < self.png_info.height && !seen.contains(&(n.0, n.1 + 1)) {
-            //        queue.push_back((n.0, n.1 + 1));
-            //    }
-            //    if n.1 > 0 && !seen.contains(&(n.0, n.1 - 1)) {
-            //        queue.push_back((n.0, n.1 - 1));
-            //    }
-            //}
         }
 
-        seen
+        FloodFill {
+            codels: seen,
+            max_x,
+            min_x,
+            max_y,
+            min_y,
+        }
     }
 
-    pub fn get_edge(&self, loc: Codel, dp: DirectionPointer) -> Vec<(Codel, Codel)> {
-        vec![]
+    /// Get all the codels on *disjoint* edge in no order
+    pub fn get_edge(&self, loc: Codel, dp: DirectionPointer) -> Vec<Codel> {
+        let flood_fill = self.get_codels_in_block(loc);
+        let mut edge = vec![];
+
+        for node in flood_fill.codels {
+            match dp {
+                DirectionPointer::Right => {
+                    if node.0 == flood_fill.max_x {
+                        edge.push(node);
+                    }
+                }
+                DirectionPointer::Left => {
+                    if node.0 == flood_fill.min_x {
+                        edge.push(node);
+                    }
+                }
+                DirectionPointer::Down => {
+                    if node.1 == flood_fill.max_y {
+                        edge.push(node);
+                    }
+                }
+                DirectionPointer::Up => {
+                    if node.1 == flood_fill.min_y {
+                        edge.push(node);
+                    }
+                }
+            }
+        }
+        edge
     }
 }
 
@@ -170,8 +203,9 @@ impl<'a> std::ops::Index<Codel> for PietImg<'a> {
     fn index(&self, loc: Codel) -> &Self::Output {
         let x = loc.0;
         let y = loc.1;
+        assert!(x < self.png_info.width);
+        assert!(y < self.png_info.height);
         let loc = ((y * (self.png_info.width * 3)) + x * 3) as usize;
-        eprintln!("indexing {} {} @ {}", x, y, loc);
 
         &self.bytes[loc..loc + 3]
     }
@@ -220,8 +254,7 @@ fn main() -> Result<(), std::io::Error> {
     dbg!(&info);
 
     let image = PietImg::new(1, info, bytes);
-    ////    let piet = PietEnv::new(&image);
-    //dbg!(image.get_codels_in_block((8, 27)).len());
+    dbg!(image.get_edge((0, 0), DirectionPointer::Down));
 
     Ok(())
 }
@@ -250,4 +283,26 @@ fn assert_color_decode_in_one_codel_golden_image() {
     assert_eq!(PietColor::from(&image[(19, 10)]), PietColor::Black);
     assert_eq!(PietColor::from(&image[(29, 24)]), PietColor::Green);
     assert_eq!(PietColor::from(&image[(29, 28)]), PietColor::LightYellow);
+}
+
+#[test]
+fn flood_fill_test_in_one_codel_golden_image() {
+    let decoder = png::Decoder::new(File::open("hello.png").unwrap());
+    let mut reader = decoder.read_info().unwrap();
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).unwrap();
+    let bytes = &buf[..info.buffer_size()];
+    let image = PietImg::new(1, info, bytes);
+
+    // the three vertical magenta blocks on the top row
+    let flood_fill = image.get_codels_in_block((19, 0));
+    assert_eq!(flood_fill.len(), 3);
+
+    // the 4 pixel pyramid inside the main red start region
+    let flood_fill = image.get_codels_in_block((4, 8));
+    assert_eq!(flood_fill.len(), 4);
+
+    // a black singleton cube
+    let flood_fill = image.get_codels_in_block((4, 6));
+    assert_eq!(flood_fill.len(), 1);
 }
