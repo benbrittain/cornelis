@@ -2,7 +2,7 @@ use num_derive::FromPrimitive;
 use png::OutputInfo;
 use std::{collections::VecDeque, fs::File};
 
-#[derive(Debug, PartialEq, FromPrimitive)]
+#[derive(Debug, Copy, Clone, PartialEq, FromPrimitive)]
 enum PietColor {
     LightRed = 0xFFC0C0,
     LightYellow = 0xFFFFC0,
@@ -29,6 +29,32 @@ enum PietColor {
     White = 0xFFFFFF,
 }
 
+impl PietColor {
+    fn get_color_scale(&self) -> (u32, u32) {
+        match self {
+            PietColor::LightRed => (0, 0),
+            PietColor::Red => (0, 1),
+            PietColor::DarkRed => (0, 2),
+            PietColor::LightYellow => (1, 0),
+            PietColor::Yellow => (1, 1),
+            PietColor::DarkYellow => (1, 2),
+            PietColor::LightGreen => (2, 0),
+            PietColor::Green => (2, 1),
+            PietColor::DarkGreen => (2, 2),
+            PietColor::LightCyan => (3, 0),
+            PietColor::Cyan => (3, 1),
+            PietColor::DarkCyan => (3, 2),
+            PietColor::LightBlue => (4, 0),
+            PietColor::Blue => (4, 1),
+            PietColor::DarkBlue => (4, 2),
+            PietColor::LightMagenta => (5, 0),
+            PietColor::Magenta => (5, 1),
+            PietColor::DarkMagenta => (5, 2),
+            _ => panic!("not on the hue/light cycle!"),
+        }
+    }
+}
+
 impl From<&[u8]> for PietColor {
     fn from(bytes: &[u8]) -> Self {
         let sample = u32::from_be_bytes([0x0, bytes[0], bytes[1], bytes[2]]);
@@ -37,11 +63,13 @@ impl From<&[u8]> for PietColor {
     }
 }
 
+#[derive(PartialEq, Clone, Copy)]
 enum CodelChoser {
     Left,
     Right,
 }
 
+#[derive(PartialEq, Clone, Copy)]
 enum DirectionPointer {
     Up,
     Down,
@@ -55,14 +83,49 @@ struct PietEnv<'a> {
     /// Codel Choser
     cc: CodelChoser,
     /// Codel Pointer
-    cp: (usize, usize),
+    cp: Codel,
     /// Stores all data values
     stack: Vec<u8>,
     /// image
     image: &'a PietImg<'a>,
 }
 
-pub type Codel = (u32, u32);
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub struct Codel {
+    x: u32,
+    y: u32,
+}
+
+impl Codel {
+    pub fn new(x: u32, y: u32) -> Self {
+        Codel { x, y }
+    }
+}
+
+impl std::ops::Add<DirectionPointer> for Codel {
+    type Output = Self;
+
+    fn add(self, other: DirectionPointer) -> Self {
+        match other {
+            DirectionPointer::Right => Codel {
+                x: self.x + 1,
+                y: self.y,
+            },
+            DirectionPointer::Left => Codel {
+                x: self.x - 1,
+                y: self.y,
+            },
+            DirectionPointer::Up => Codel {
+                x: self.x,
+                y: self.y - 1,
+            },
+            DirectionPointer::Down => Codel {
+                x: self.x,
+                y: self.y + 1,
+            },
+        }
+    }
+}
 
 struct PietImg<'a> {
     codel_size: u32,
@@ -95,7 +158,7 @@ impl<'a> PietImg<'a> {
 
     pub fn get_codels_in_block(&self, loc: Codel) -> FloodFill {
         let mut queue = VecDeque::new();
-        let mut seen = vec![];
+        let mut seen: Vec<Codel> = vec![];
         let mut min_y = self.png_info.height;
         let mut max_y = 0;
         let mut min_x = self.png_info.width;
@@ -103,7 +166,6 @@ impl<'a> PietImg<'a> {
         queue.push_back(loc);
 
         let block_color: PietColor = self[loc].into();
-        eprintln!("Block color {:?}", block_color);
 
         while !queue.is_empty() {
             let n = queue.pop_front().unwrap();
@@ -114,43 +176,42 @@ impl<'a> PietImg<'a> {
             if codel_color != block_color {
                 continue;
             }
-            eprintln!("Codel color {:?} of {:?}", codel_color, n);
 
-            if n.0 > max_x {
-                max_x = n.0;
+            if n.x > max_x {
+                max_x = n.x;
             }
-            if n.1 > max_y {
-                max_y = n.1;
+            if n.y > max_y {
+                max_y = n.y;
             }
-            if n.0 < min_x {
-                min_x = n.0;
+            if n.x < min_x {
+                min_x = n.x;
             }
-            if n.1 < min_y {
-                min_y = n.0;
+            if n.y < min_y {
+                min_y = n.x;
             }
             seen.push(n);
 
-            if n.0 > 0 {
-                let left = (n.0 - 1, n.1);
+            if n.x > 0 {
+                let left = Codel { x: n.x - 1, y: n.y };
                 if !seen.contains(&left) {
                     queue.push_back(left)
                 }
             }
 
-            if n.1 > 0 {
-                let up = (n.0, n.1 - 1);
+            if n.y > 0 {
+                let up = Codel { x: n.x, y: n.y - 1 };
                 if !seen.contains(&up) {
                     queue.push_back(up);
                 }
             }
 
-            let right = (n.0 + 1, n.1);
-            if n.0 + 1 < self.png_info.width && !seen.contains(&right) {
+            let right = Codel { x: n.x + 1, y: n.y };
+            if n.x + 1 < self.png_info.width && !seen.contains(&right) {
                 queue.push_back(right);
             }
 
-            let down = (n.0, n.1 + 1);
-            if n.1 < self.png_info.height && !seen.contains(&down) {
+            let down = Codel { x: n.x, y: n.y + 1 };
+            if n.y < self.png_info.height && !seen.contains(&down) {
                 queue.push_back(down);
             }
         }
@@ -163,46 +224,14 @@ impl<'a> PietImg<'a> {
             min_y,
         }
     }
-
-    /// Get all the codels on *disjoint* edge in no order
-    pub fn get_edge(&self, loc: Codel, dp: DirectionPointer) -> Vec<Codel> {
-        let flood_fill = self.get_codels_in_block(loc);
-        let mut edge = vec![];
-
-        for node in flood_fill.codels {
-            match dp {
-                DirectionPointer::Right => {
-                    if node.0 == flood_fill.max_x {
-                        edge.push(node);
-                    }
-                }
-                DirectionPointer::Left => {
-                    if node.0 == flood_fill.min_x {
-                        edge.push(node);
-                    }
-                }
-                DirectionPointer::Down => {
-                    if node.1 == flood_fill.max_y {
-                        edge.push(node);
-                    }
-                }
-                DirectionPointer::Up => {
-                    if node.1 == flood_fill.min_y {
-                        edge.push(node);
-                    }
-                }
-            }
-        }
-        edge
-    }
 }
 
 impl<'a> std::ops::Index<Codel> for PietImg<'a> {
     type Output = [u8];
 
     fn index(&self, loc: Codel) -> &Self::Output {
-        let x = loc.0;
-        let y = loc.1;
+        let x = loc.x;
+        let y = loc.y;
         assert!(x < self.png_info.width);
         assert!(y < self.png_info.height);
         let loc = ((y * (self.png_info.width * 3)) + x * 3) as usize;
@@ -219,26 +248,101 @@ fn verify_colors(bytes: &[u8]) {
     }
 }
 
+#[derive(Debug)]
+enum PietOp {
+    None,
+    Add,
+    Divide,
+    Greater,
+    Duplicate,
+    InChar,
+}
+
+fn get_op(node: PietColor, next_node: PietColor) -> PietOp {
+    let color = &node.get_color_scale();
+    let next_color = &next_node.get_color_scale();
+    let darkness = next_color.1 - color.1;
+    let hue = next_color.0 - color.0;
+    dbg!(color);
+    dbg!(next_color);
+    dbg!(darkness, hue);
+
+    if darkness == 1 && hue == 0 {
+        PietOp::Add
+    } else {
+        panic!("Unknown transition of {:?} {:?}", node, next_node);
+    }
+}
+
 impl<'a> PietEnv<'a> {
     pub fn new(image: &'a PietImg) -> Self {
         PietEnv {
             dp: DirectionPointer::Right,
             cc: CodelChoser::Left,
-            cp: (0, 0),
+            cp: Codel { x: 0, y: 0 },
             stack: Vec::new(),
             image,
         }
     }
 
+    /// Get all the codels on *disjoint* edge in no order
+    pub fn get_block_transition(&self, loc: Codel, dp: DirectionPointer) -> (Codel, u32) {
+        let flood_fill = self.image.get_codels_in_block(loc);
+
+        // 1. The interpreter finds the edge of the current colour block which is furthest in the direction of the DP. (This edge may be disjoint if the block is of a complex shape.)
+        let mut edge = vec![];
+        for node in &flood_fill.codels {
+            match dp {
+                DirectionPointer::Right => {
+                    if node.x == flood_fill.max_x {
+                        edge.push(node);
+                    }
+                }
+                DirectionPointer::Left => {
+                    if node.x == flood_fill.min_x {
+                        edge.push(node);
+                    }
+                }
+                DirectionPointer::Down => {
+                    if node.y == flood_fill.max_y {
+                        edge.push(node);
+                    }
+                }
+                DirectionPointer::Up => {
+                    if node.y == flood_fill.min_y {
+                        edge.push(node);
+                    }
+                }
+            }
+        }
+
+        // 2. The interpreter finds the codel of the current colour block on that edge which
+        // is furthest to the CC's direction of the DP's direction of travel.
+        // (Visualise this as standing on the program and walking in the direction of the DP; see table at right.)
+        let exit_node = if self.dp == DirectionPointer::Right && self.cc == CodelChoser::Left {
+            // Uppermost
+            edge[0]
+        } else {
+            todo!()
+        };
+
+        (*exit_node, flood_fill.codels.len() as u32)
+    }
+
     fn step(&mut self) {
-        // The interpreter finds the edge of the current colour block which is furthest in the direction of the DP. (This edge may be disjoint if the block is of a complex shape.)
+        let (exit_node, node_size) = self.get_block_transition(self.cp, self.dp);
 
-        //            let self.image.get_edge(cp, dp);
-        // The interpreter finds the codel of the current colour block on that edge which is furthest to the CC's direction of the DP's direction of travel. (Visualise this as standing on the program and walking in the direction of the DP; see table at right.)
         // The interpreter travels from that codel into the colour block containing the codel immediately in the direction of the DP.
+        let next_node = exit_node + self.dp;
+        let node_color: PietColor = self.image[exit_node].into();
+        let next_node_color: PietColor = self.image[next_node].into();
 
-        //           let next_block = self.imag
-        //           let color = self.fetch_color(self.cp);
+        // decode the transition
+        let op = get_op(node_color, next_node_color);
+        eprintln!(
+            "{:?} | {:?}/{:?} => {:?}/{:?} [{:?}]",
+            self.cp, exit_node, node_color, next_node, next_node_color, op
+        );
     }
 }
 
@@ -254,7 +358,9 @@ fn main() -> Result<(), std::io::Error> {
     dbg!(&info);
 
     let image = PietImg::new(1, info, bytes);
-    dbg!(image.get_edge((0, 0), DirectionPointer::Down));
+    let mut env = PietEnv::new(&image);
+
+    env.step();
 
     Ok(())
 }
@@ -268,21 +374,42 @@ fn assert_color_decode_in_one_codel_golden_image() {
     let bytes = &buf[..info.buffer_size()];
     let image = PietImg::new(1, info, bytes);
 
-    assert_eq!(PietColor::from(&image[(0, 0)]), PietColor::Red);
-    assert_eq!(PietColor::from(&image[(1, 0)]), PietColor::Red);
-    assert_eq!(PietColor::from(&image[(0, 1)]), PietColor::Red);
-    assert_eq!(PietColor::from(&image[(10, 0)]), PietColor::Red);
-    assert_eq!(PietColor::from(&image[(11, 0)]), PietColor::DarkRed);
-    assert_eq!(PietColor::from(&image[(18, 0)]), PietColor::Magenta);
-    assert_eq!(PietColor::from(&image[(19, 0)]), PietColor::DarkMagenta);
-    assert_eq!(PietColor::from(&image[(20, 0)]), PietColor::Blue);
-    assert_eq!(PietColor::from(&image[(21, 0)]), PietColor::Blue);
-    assert_eq!(PietColor::from(&image[(27, 0)]), PietColor::Blue);
-    assert_eq!(PietColor::from(&image[(29, 0)]), PietColor::Blue);
-    assert_eq!(PietColor::from(&image[(11, 1)]), PietColor::Magenta);
-    assert_eq!(PietColor::from(&image[(19, 10)]), PietColor::Black);
-    assert_eq!(PietColor::from(&image[(29, 24)]), PietColor::Green);
-    assert_eq!(PietColor::from(&image[(29, 28)]), PietColor::LightYellow);
+    assert_eq!(PietColor::from(&image[Codel::new(0, 0)]), PietColor::Red);
+    assert_eq!(PietColor::from(&image[Codel::new(1, 0)]), PietColor::Red);
+    assert_eq!(PietColor::from(&image[Codel::new(0, 1)]), PietColor::Red);
+    assert_eq!(PietColor::from(&image[Codel::new(10, 0)]), PietColor::Red);
+    assert_eq!(
+        PietColor::from(&image[Codel::new(11, 0)]),
+        PietColor::DarkRed
+    );
+    assert_eq!(
+        PietColor::from(&image[Codel::new(18, 0)]),
+        PietColor::Magenta
+    );
+    assert_eq!(
+        PietColor::from(&image[Codel::new(19, 0)]),
+        PietColor::DarkMagenta
+    );
+    assert_eq!(PietColor::from(&image[Codel::new(20, 0)]), PietColor::Blue);
+    assert_eq!(PietColor::from(&image[Codel::new(21, 0)]), PietColor::Blue);
+    assert_eq!(PietColor::from(&image[Codel::new(27, 0)]), PietColor::Blue);
+    assert_eq!(PietColor::from(&image[Codel::new(29, 0)]), PietColor::Blue);
+    assert_eq!(
+        PietColor::from(&image[Codel::new(11, 1)]),
+        PietColor::Magenta
+    );
+    assert_eq!(
+        PietColor::from(&image[Codel::new(19, 10)]),
+        PietColor::Black
+    );
+    assert_eq!(
+        PietColor::from(&image[Codel::new(29, 24)]),
+        PietColor::Green
+    );
+    assert_eq!(
+        PietColor::from(&image[Codel::new(29, 28)]),
+        PietColor::LightYellow
+    );
 }
 
 #[test]
@@ -295,14 +422,14 @@ fn flood_fill_test_in_one_codel_golden_image() {
     let image = PietImg::new(1, info, bytes);
 
     // the three vertical magenta blocks on the top row
-    let flood_fill = image.get_codels_in_block((19, 0));
-    assert_eq!(flood_fill.len(), 3);
+    let flood_fill = image.get_codels_in_block(Codel::new(19, 0));
+    assert_eq!(flood_fill.codels.len(), 3);
 
     // the 4 pixel pyramid inside the main red start region
-    let flood_fill = image.get_codels_in_block((4, 8));
-    assert_eq!(flood_fill.len(), 4);
+    let flood_fill = image.get_codels_in_block(Codel::new(4, 8));
+    assert_eq!(flood_fill.codels.len(), 4);
 
     // a black singleton cube
-    let flood_fill = image.get_codels_in_block((4, 6));
-    assert_eq!(flood_fill.len(), 1);
+    let flood_fill = image.get_codels_in_block(Codel::new(4, 6));
+    assert_eq!(flood_fill.codels.len(), 1);
 }
