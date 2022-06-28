@@ -63,13 +63,13 @@ impl From<&[u8]> for PietColor {
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum CodelChoser {
     Left,
     Right,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum DirectionPointer {
     Up,
     Down,
@@ -85,9 +85,11 @@ struct PietEnv<'a> {
     /// Codel Pointer
     cp: Codel,
     /// Stores all data values
-    stack: Vec<u8>,
+    stack: Vec<u32>,
     /// image
     image: &'a PietImg<'a>,
+    /// How many times we've hit a flow restriction (black blocks & edges)
+    flow_restricted_count: usize,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -100,30 +102,26 @@ impl Codel {
     pub fn new(x: u32, y: u32) -> Self {
         Codel { x, y }
     }
-}
 
-impl std::ops::Add<DirectionPointer> for Codel {
-    type Output = Self;
-
-    fn add(self, other: DirectionPointer) -> Self {
-        match other {
+    fn block_in_dir(self, other: DirectionPointer) -> Option<Self> {
+        Some(match other {
             DirectionPointer::Right => Codel {
-                x: self.x + 1,
+                x: self.x.checked_add(1)?,
                 y: self.y,
             },
             DirectionPointer::Left => Codel {
-                x: self.x - 1,
+                x: self.x.checked_sub(1)?,
                 y: self.y,
             },
             DirectionPointer::Up => Codel {
                 x: self.x,
-                y: self.y - 1,
+                y: self.y.checked_sub(1)?,
             },
             DirectionPointer::Down => Codel {
                 x: self.x,
-                y: self.y + 1,
+                y: self.y.checked_add(1)?,
             },
-        }
+        })
     }
 }
 
@@ -154,6 +152,10 @@ impl<'a> PietImg<'a> {
             png_info,
             bytes,
         }
+    }
+
+    pub fn contains(&self, loc: Codel) -> bool {
+        loc.x < self.png_info.width && loc.y < self.png_info.height
     }
 
     pub fn get_codels_in_block(&self, loc: Codel) -> FloodFill {
@@ -187,7 +189,7 @@ impl<'a> PietImg<'a> {
                 min_x = n.x;
             }
             if n.y < min_y {
-                min_y = n.x;
+                min_y = n.y;
             }
             seen.push(n);
 
@@ -211,7 +213,7 @@ impl<'a> PietImg<'a> {
             }
 
             let down = Codel { x: n.x, y: n.y + 1 };
-            if n.y < self.png_info.height && !seen.contains(&down) {
+            if n.y + 1 < self.png_info.height && !seen.contains(&down) {
                 queue.push_back(down);
             }
         }
@@ -277,9 +279,7 @@ enum PietOp {
 
 fn get_op(node: PietColor, next_node: PietColor) -> PietOp {
     let color = &node.get_color_scale();
-    dbg!(node, next_node);
     let next_color = &next_node.get_color_scale();
-    dbg!(color, next_color);
     let darkness = (next_color.1 + 3 - color.1) % 3;
     let hue = (next_color.0 + 6 - color.0) % 6;
 
@@ -289,6 +289,10 @@ fn get_op(node: PietColor, next_node: PietColor) -> PietOp {
         PietOp::Push
     } else if darkness == 2 && hue == 5 {
         PietOp::OutChar
+    } else if darkness == 0 && hue == 4 {
+        PietOp::Duplicate
+    } else if darkness == 1 && hue == 2 {
+        PietOp::Multiply
     } else {
         panic!(
             "Unknown transition of {:?} {:?} ({:?})",
@@ -306,6 +310,7 @@ impl<'a> PietEnv<'a> {
             cc: CodelChoser::Left,
             cp: Codel { x: 0, y: 0 },
             stack: Vec::new(),
+            flow_restricted_count: 0,
             image,
         }
     }
@@ -313,6 +318,10 @@ impl<'a> PietEnv<'a> {
     /// Get all the codels on *disjoint* edge in no order
     pub fn get_block_transition(&self, loc: Codel, dp: DirectionPointer) -> (Codel, u32) {
         let flood_fill = self.image.get_codels_in_block(loc);
+        dbg!(&flood_fill.codels);
+        dbg!(dp);
+        dbg!(flood_fill.min_x, flood_fill.min_y);
+        dbg!(flood_fill.max_x, flood_fill.max_y);
 
         // 1. The interpreter finds the edge of the current colour block which is furthest in the direction of the DP. (This edge may be disjoint if the block is of a complex shape.)
         let mut edge = vec![];
@@ -341,12 +350,42 @@ impl<'a> PietEnv<'a> {
             }
         }
 
+        dbg!(&edge);
         // 2. The interpreter finds the codel of the current colour block on that edge which
         // is furthest to the CC's direction of the DP's direction of travel.
         // (Visualise this as standing on the program and walking in the direction of the DP; see table at right.)
         let exit_node = if self.dp == DirectionPointer::Right && self.cc == CodelChoser::Left {
+            edge.sort_unstable_by(|a, b| a.y.partial_cmp(&b.y).unwrap());
             // Uppermost
             edge[0]
+        } else if self.dp == DirectionPointer::Right && self.cc == CodelChoser::Right {
+            edge.sort_unstable_by(|a, b| a.y.partial_cmp(&b.y).unwrap());
+            // Lowermost
+            edge.last().unwrap()
+        } else if self.dp == DirectionPointer::Down && self.cc == CodelChoser::Right {
+            edge.sort_unstable_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+            // leftmost
+            edge[0]
+        } else if self.dp == DirectionPointer::Down && self.cc == CodelChoser::Left {
+            edge.sort_unstable_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+            // rightmost
+            edge.last().unwrap()
+        } else if self.dp == DirectionPointer::Left && self.cc == CodelChoser::Left {
+            edge.sort_unstable_by(|a, b| a.y.partial_cmp(&b.y).unwrap());
+            // lowermost
+            edge.last().unwrap()
+        } else if self.dp == DirectionPointer::Left && self.cc == CodelChoser::Right {
+            edge.sort_unstable_by(|a, b| a.y.partial_cmp(&b.y).unwrap());
+            // uppermost
+            edge[0]
+        } else if self.dp == DirectionPointer::Up && self.cc == CodelChoser::Left {
+            edge.sort_unstable_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+            // leftmost
+            edge[0]
+        } else if self.dp == DirectionPointer::Up && self.cc == CodelChoser::Right {
+            edge.sort_unstable_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+            // rightmost
+            edge.last().unwrap()
         } else {
             todo!()
         };
@@ -358,19 +397,78 @@ impl<'a> PietEnv<'a> {
         eprintln!("====== STEP ======");
         let (exit_node, node_size) = self.get_block_transition(self.cp, self.dp);
 
-        // The interpreter travels from that codel into the colour block containing the codel immediately in the direction of the DP.
-        let next_node = exit_node + self.dp;
+        let loc_color: PietColor = self.image[self.cp].into();
         let node_color: PietColor = self.image[exit_node].into();
-        let next_node_color: PietColor = self.image[next_node].into();
+        assert_eq!(loc_color, node_color);
+        // The interpreter travels from that codel into the colour block containing the codel immediately in the direction of the DP.
+        let next_node = exit_node.block_in_dir(self.dp);
+
+        let next_node_color = if let Some(next_node) = next_node {
+            if self.image.contains(next_node) {
+                self.image[next_node].into()
+            } else {
+                PietColor::Black
+            }
+        } else {
+            PietColor::Black
+        };
+
+        if next_node_color == PietColor::Black {
+            if self.flow_restricted_count >= 8 {
+                println!("PROGRAM EXECUTION COMPLETE");
+                return;
+            }
+            if self.flow_restricted_count % 2 == 0 {
+                match self.cc {
+                    CodelChoser::Left => self.cc = CodelChoser::Right,
+                    CodelChoser::Right => self.cc = CodelChoser::Left,
+                }
+            } else if self.flow_restricted_count % 2 == 1 {
+                match self.dp {
+                    DirectionPointer::Right => self.dp = DirectionPointer::Down,
+                    DirectionPointer::Down => self.dp = DirectionPointer::Left,
+                    DirectionPointer::Left => self.dp = DirectionPointer::Up,
+                    DirectionPointer::Up => self.dp = DirectionPointer::Right,
+                }
+            }
+
+            println!("BLACK RESTRICT #{}", self.flow_restricted_count);
+            self.flow_restricted_count += 1;
+            eprintln!(
+                "{:?} | {:?}/{:?} => {:?}/{:?} # CC {:?} # DP {:?}",
+                self.cp, exit_node, node_color, next_node, next_node_color, self.cc, self.dp,
+            );
+            return;
+        }
 
         // decode the transition
         let op = get_op(node_color, next_node_color);
+        self.flow_restricted_count = 0;
         eprintln!(
             "{:?} | {:?}/{:?} => {:?}/{:?} [{:?}]",
             self.cp, exit_node, node_color, next_node, next_node_color, op
         );
 
-        self.cp = next_node;
+        match op {
+            PietOp::Push => self.stack.push(node_size),
+            PietOp::OutChar => {
+                let val = self.stack.pop().unwrap();
+                println!("OUT: {}", char::from_u32(val).unwrap());
+            }
+            PietOp::Duplicate => {
+                let val = self.stack.pop().unwrap();
+                self.stack.push(val);
+                self.stack.push(val);
+            }
+            PietOp::Multiply => {
+                let a = self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap();
+                self.stack.push(a * b);
+            }
+            _ => todo!(),
+        }
+
+        self.cp = next_node.unwrap();
     }
 }
 
@@ -387,9 +485,6 @@ fn main() -> Result<(), std::io::Error> {
     let image = PietImg::new(1, info, bytes);
     let mut env = PietEnv::new(&image);
 
-    env.step();
-    env.step();
-    env.step();
     env.step();
 
     Ok(())
@@ -462,4 +557,6 @@ fn flood_fill_test_in_one_codel_golden_image() {
     // a black singleton cube
     let flood_fill = image.get_codels_in_block(Codel::new(4, 6));
     assert_eq!(flood_fill.codels.len(), 1);
+
+    let flood_fill = image.get_codels_in_block(Codel::new(25, 25));
 }
