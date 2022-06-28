@@ -1,6 +1,6 @@
 use crate::ty::*;
 use png::OutputInfo;
-use std::{collections::VecDeque, fs::File};
+use std::collections::VecDeque;
 
 #[derive(Debug)]
 pub struct FloodFill {
@@ -123,6 +123,6 @@ impl<'a> std::ops::Index<Codel> for PietImg<'a> {
 fn verify_colors(bytes: &[u8]) {
     for chunk in bytes[..].chunks(3) {
         let sample = u32::from_be_bytes([0x0, chunk[0], chunk[1], chunk[2]]);
-        let color: PietColor = num::FromPrimitive::from_u32(sample).unwrap();
+        let _: PietColor = num::FromPrimitive::from_u32(sample).unwrap();
     }
 }
