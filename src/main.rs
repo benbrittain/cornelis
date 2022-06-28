@@ -251,26 +251,51 @@ fn verify_colors(bytes: &[u8]) {
 #[derive(Debug)]
 enum PietOp {
     None,
+    Push,
+    Pop,
+
     Add,
+    Subtract,
+    Multiply,
+
     Divide,
+    Mod,
+    Not,
+
     Greater,
+    Pointer,
+    Switch,
+
     Duplicate,
+    Roll,
+    InNumber,
+
     InChar,
+    OutNumber,
+    OutChar,
 }
 
 fn get_op(node: PietColor, next_node: PietColor) -> PietOp {
     let color = &node.get_color_scale();
+    dbg!(node, next_node);
     let next_color = &next_node.get_color_scale();
-    let darkness = next_color.1 - color.1;
-    let hue = next_color.0 - color.0;
-    dbg!(color);
-    dbg!(next_color);
-    dbg!(darkness, hue);
+    dbg!(color, next_color);
+    let darkness = (next_color.1 + 3 - color.1) % 3;
+    let hue = (next_color.0 + 6 - color.0) % 6;
 
-    if darkness == 1 && hue == 0 {
-        PietOp::Add
+    if darkness == 0 && hue == 0 {
+        PietOp::None
+    } else if darkness == 1 && hue == 0 {
+        PietOp::Push
+    } else if darkness == 2 && hue == 5 {
+        PietOp::OutChar
     } else {
-        panic!("Unknown transition of {:?} {:?}", node, next_node);
+        panic!(
+            "Unknown transition of {:?} {:?} ({:?})",
+            node,
+            next_node,
+            (darkness, hue)
+        );
     }
 }
 
@@ -330,6 +355,7 @@ impl<'a> PietEnv<'a> {
     }
 
     fn step(&mut self) {
+        eprintln!("====== STEP ======");
         let (exit_node, node_size) = self.get_block_transition(self.cp, self.dp);
 
         // The interpreter travels from that codel into the colour block containing the codel immediately in the direction of the DP.
@@ -343,6 +369,8 @@ impl<'a> PietEnv<'a> {
             "{:?} | {:?}/{:?} => {:?}/{:?} [{:?}]",
             self.cp, exit_node, node_color, next_node, next_node_color, op
         );
+
+        self.cp = next_node;
     }
 }
 
@@ -355,11 +383,13 @@ fn main() -> Result<(), std::io::Error> {
 
     // TODO verify more things about the PNG
     assert!(info.color_type == png::ColorType::Rgb);
-    dbg!(&info);
 
     let image = PietImg::new(1, info, bytes);
     let mut env = PietEnv::new(&image);
 
+    env.step();
+    env.step();
+    env.step();
     env.step();
 
     Ok(())
