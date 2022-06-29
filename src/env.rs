@@ -58,13 +58,13 @@ fn get_op(node: PietColor, next_node: PietColor) -> PietOp {
 #[derive(Clone, PartialEq)]
 pub struct PietEnv {
     /// Direction Pointer
-    dp: DirectionPointer,
+    pub dp: DirectionPointer,
     /// Codel Choser
-    cc: CodelChoser,
+    pub cc: CodelChoser,
     /// Codel Pointer
-    cp: Codel,
+    pub cp: Codel,
     /// Stores all data values
-    stack: Vec<u32>,
+    pub stack: Vec<u32>,
     /// image
     pub image: PietImg,
     /// How many times we've hit a flow restriction (black blocks & edges)
@@ -72,8 +72,7 @@ pub struct PietEnv {
 }
 impl druid::Data for PietEnv {
     fn same(&self, other: &Self) -> bool {
-        true
-
+        self.dp == other.dp && self.cp == other.cp
     }
 }
 

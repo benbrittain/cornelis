@@ -70,5 +70,13 @@ impl Widget<AppData> for PietViewWidget {
                 ctx.fill(rect, &color);
             }
         }
+
+        let point = Point {
+            x: w0 * data.env.cp.x as f64,
+            y: w0 * data.env.cp.y as f64,
+        };
+        let rect = Rect::from_origin_size(point, cell_size * 0.8);
+        let color = Color::rgb8(0, 0, 0);
+        ctx.fill(rect, &color);
     }
 }
