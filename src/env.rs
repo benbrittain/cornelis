@@ -1,5 +1,6 @@
 use crate::image::PietImg;
 use crate::ty::*;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum PietOp {
@@ -54,7 +55,8 @@ fn get_op(node: PietColor, next_node: PietColor) -> PietOp {
     }
 }
 
-pub struct PietEnv<'a> {
+#[derive(Clone, PartialEq)]
+pub struct PietEnv {
     /// Direction Pointer
     dp: DirectionPointer,
     /// Codel Choser
@@ -64,13 +66,19 @@ pub struct PietEnv<'a> {
     /// Stores all data values
     stack: Vec<u32>,
     /// image
-    image: &'a PietImg<'a>,
+    pub image: PietImg,
     /// How many times we've hit a flow restriction (black blocks & edges)
     flow_restricted_count: usize,
 }
+impl druid::Data for PietEnv {
+    fn same(&self, other: &Self) -> bool {
+        true
 
-impl<'a> PietEnv<'a> {
-    pub fn new(image: &'a PietImg) -> Self {
+    }
+}
+
+impl PietEnv {
+    pub fn new(image: PietImg) -> Self {
         PietEnv {
             dp: DirectionPointer::Right,
             cc: CodelChoser::Left,

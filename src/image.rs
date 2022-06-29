@@ -1,6 +1,23 @@
 use crate::ty::*;
-use png::OutputInfo;
 use std::collections::VecDeque;
+use std::sync::Arc;
+
+#[derive(druid::Data, PartialEq)]
+pub struct OutputInfo(std::sync::Arc<png::OutputInfo>);
+
+impl Clone for OutputInfo {
+    fn clone(&self) -> Self {
+        OutputInfo(self.0.clone())
+    }
+}
+
+impl std::ops::Deref for OutputInfo {
+    type Target = png::OutputInfo;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct FloodFill {
@@ -11,14 +28,15 @@ pub struct FloodFill {
     pub max_y: u32,
 }
 
-pub struct PietImg<'a> {
-    codel_size: u32,
-    png_info: OutputInfo,
-    bytes: &'a [u8],
+#[derive(Clone, druid::Data, PartialEq)]
+pub struct PietImg {
+    pub codel_size: u32,
+    pub png_info: OutputInfo,
+    bytes: std::sync::Arc<Vec<u8>>,
 }
 
-impl<'a> PietImg<'a> {
-    pub fn new(codel_size: u32, png_info: OutputInfo, bytes: &'a [u8]) -> Self {
+impl PietImg {
+    pub fn new(codel_size: u32, png_info: png::OutputInfo, bytes: &[u8]) -> Self {
         verify_colors(bytes);
 
         // being lazy for now
@@ -26,8 +44,8 @@ impl<'a> PietImg<'a> {
 
         PietImg {
             codel_size,
-            png_info,
-            bytes,
+            png_info: OutputInfo(Arc::new(png_info)),
+            bytes: std::sync::Arc::new(bytes.to_vec()),
         }
     }
 
@@ -105,7 +123,7 @@ impl<'a> PietImg<'a> {
     }
 }
 
-impl<'a> std::ops::Index<Codel> for PietImg<'a> {
+impl std::ops::Index<Codel> for PietImg {
     type Output = [u8];
 
     fn index(&self, loc: Codel) -> &Self::Output {

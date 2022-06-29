@@ -1,6 +1,7 @@
 use num_derive::FromPrimitive;
+use druid::{Lens, Data};
 
-#[derive(Debug, Copy, Clone, PartialEq, FromPrimitive)]
+#[derive(Data, Debug, Copy, Clone, PartialEq, FromPrimitive)]
 pub enum PietColor {
     LightRed = 0xFFC0C0,
     LightYellow = 0xFFFFC0,
@@ -61,13 +62,13 @@ impl From<&[u8]> for PietColor {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Data, Debug, PartialEq, Clone, Copy)]
 pub enum CodelChoser {
     Left,
     Right,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Data, Debug, PartialEq, Clone, Copy)]
 pub enum DirectionPointer {
     Up,
     Down,
@@ -75,7 +76,7 @@ pub enum DirectionPointer {
     Right,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(Data, PartialEq, Debug, Clone, Copy)]
 pub struct Codel {
     pub x: u32,
     pub y: u32,

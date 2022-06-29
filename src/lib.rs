@@ -1,25 +1,94 @@
-use std::fs::File;
-
 mod env;
 mod image;
 mod ty;
+mod piet_widget;
 
-fn main() -> Result<(), std::io::Error> {
-    let decoder = png::Decoder::new(File::open("hello.png")?);
+use piet_widget::PietViewWidget;
+
+use druid::widget::{Flex, Label, TextBox, Slider, Button};
+use druid::{Color, Size, AppLauncher, Data, Env, Lens, Widget, WidgetExt, WindowDesc};
+use env::PietEnv;
+use wasm_bindgen::prelude::*;
+
+mod macros {
+    #[allow(unused_macros)]
+    macro_rules! log {
+        ( $( $t:tt )* ) => {
+            web_sys::console::log_1(&format!( $( $t )* ).into());
+        }
+    }
+    pub(crate) use log;
+}
+
+
+const BACKGROUND: Color = Color::grey8(23);
+
+#[wasm_bindgen]
+pub fn wasm_main() {
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    main()
+}
+
+#[derive(Clone, Lens, Data)]
+struct AppData {
+    env: PietEnv,
+    drawing: bool,
+}
+
+fn build_root_widget() -> impl Widget<AppData> {
+    Flex::column()
+        .with_flex_child(
+            PietViewWidget {
+                cell_size: Size {
+                    width: 0.0,
+                    height: 0.0,
+                },
+            },
+            1.0,
+        )
+        .with_child(
+            Flex::column()
+                .with_child(
+                    Flex::row()
+                        .with_flex_child(
+                            Button::new("Step")
+                                .on_click(|ctx, env: &mut PietEnv, _: &Env| {
+                                    env.step();
+                                    ctx.request_paint();
+                                })
+                                .lens(AppData::env)
+                                .padding((5., 5.)),
+                            1.0,
+                        )
+                        .padding(8.0),
+                )
+                .background(BACKGROUND),
+        )
+}
+
+pub fn main() {
+    let main_window = WindowDesc::new(|| build_root_widget());
+
+    let image = include_bytes!("../hello.png");
+    let decoder = png::Decoder::new(&image[..]);
     let mut reader = decoder.read_info().unwrap();
     let mut buf = vec![0; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf)?;
+    let info = reader.next_frame(&mut buf).unwrap();
     let bytes = &buf[..info.buffer_size()];
 
-    // TODO verify more things about the PNG
-    assert!(info.color_type == png::ColorType::Rgb);
-
     let image = image::PietImg::new(1, info, bytes);
-    let mut env = env::PietEnv::new(&image);
+    let mut env = env::PietEnv::new(image);
 
-    env.step();
+    // create the initial app state
+    let initial_state = AppData {
+        env,
+        drawing: false,
+    };
 
-    Ok(())
+    // start the application
+    AppLauncher::with_window(main_window)
+        .launch(initial_state)
+        .expect("Failed to launch application");
 }
 
 #[cfg(test)]
@@ -27,6 +96,7 @@ mod test {
     use super::*;
     use crate::image::PietImg;
     use crate::ty::*;
+    use std::fs::File;
 
     #[test]
     fn assert_color_decode_in_one_codel_golden_image() {
