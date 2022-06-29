@@ -5,8 +5,8 @@ mod piet_widget;
 
 use piet_widget::PietViewWidget;
 
-use druid::widget::{Flex, Label, TextBox, Slider, Button};
-use druid::{Color, Size, AppLauncher, Data, Env, Lens, Widget, WidgetExt, WindowDesc};
+use druid::widget::{Scroll, Split, RawLabel, Flex, Label, TextBox, Slider, Button};
+use druid::{Color, Size, AppLauncher, Data, Env, LensExt, Lens, Widget, WidgetExt, WindowDesc};
 use env::PietEnv;
 use wasm_bindgen::prelude::*;
 
@@ -36,7 +36,7 @@ struct AppData {
 }
 
 fn build_root_widget() -> impl Widget<AppData> {
-    Flex::column()
+    let visual = Flex::column()
         .with_flex_child(
             PietViewWidget {
                 cell_size: Size {
@@ -63,7 +63,14 @@ fn build_root_widget() -> impl Widget<AppData> {
                         .padding(8.0),
                 )
                 .background(BACKGROUND),
-        )
+        );
+
+    let stack = Label::dynamic(|data, _| format!("{:?}", data))
+        .lens(AppData::env.then(PietEnv::stack))
+        .expand()
+        .padding(5.0);
+
+    Split::columns(visual, stack)
 }
 
 pub fn main() {

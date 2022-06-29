@@ -55,7 +55,30 @@ fn get_op(node: PietColor, next_node: PietColor) -> PietOp {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stack(Vec<u32>);
+
+impl std::ops::DerefMut for Stack {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl std::ops::Deref for Stack {
+    type Target = Vec<u32>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl druid::Data for Stack {
+    fn same(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+#[derive(Clone, druid::Lens, PartialEq)]
 pub struct PietEnv {
     /// Direction Pointer
     pub dp: DirectionPointer,
@@ -64,7 +87,7 @@ pub struct PietEnv {
     /// Codel Pointer
     pub cp: Codel,
     /// Stores all data values
-    pub stack: Vec<u32>,
+    pub stack: Stack,
     /// image
     pub image: PietImg,
     /// How many times we've hit a flow restriction (black blocks & edges)
@@ -82,7 +105,7 @@ impl PietEnv {
             dp: DirectionPointer::Right,
             cc: CodelChoser::Left,
             cp: Codel { x: 0, y: 0 },
-            stack: Vec::new(),
+            stack: Stack(Vec::new()),
             flow_restricted_count: 0,
             image,
         }
