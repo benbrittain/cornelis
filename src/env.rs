@@ -78,6 +78,15 @@ impl druid::Data for Stack {
     }
 }
 
+impl std::fmt::Display for Stack {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        for (i, x) in self.0.iter().enumerate() {
+            write!(f, "{}:\t{:#02X}\n", i, x)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, druid::Lens, PartialEq)]
 pub struct PietEnv {
     /// Direction Pointer
@@ -92,10 +101,15 @@ pub struct PietEnv {
     pub image: PietImg,
     /// How many times we've hit a flow restriction (black blocks & edges)
     flow_restricted_count: usize,
+    /// Output
+    pub output: String,
 }
 impl druid::Data for PietEnv {
     fn same(&self, other: &Self) -> bool {
-        self.dp == other.dp && self.cp == other.cp
+        self.dp == other.dp
+            && self.cp == other.cp
+            && self.output == other.output
+            && self.cc == other.cc
     }
 }
 
@@ -108,6 +122,7 @@ impl PietEnv {
             stack: Stack(Vec::new()),
             flow_restricted_count: 0,
             image,
+            output: String::new(),
         }
     }
 
@@ -211,7 +226,7 @@ impl PietEnv {
 
         if next_node_color == PietColor::Black {
             if self.flow_restricted_count >= 8 {
-                println!("PROGRAM EXECUTION COMPLETE");
+                self.output.push_str("\nEXECUTION TERMINATED\n");
                 return;
             }
             if self.flow_restricted_count % 2 == 0 {
@@ -249,7 +264,7 @@ impl PietEnv {
             PietOp::Push => self.stack.push(node_size),
             PietOp::OutChar => {
                 let val = self.stack.pop().unwrap();
-                println!("OUT: {}", char::from_u32(val).unwrap());
+                self.output.push(char::from_u32(val).unwrap().into());
             }
             PietOp::Duplicate => {
                 let val = self.stack.pop().unwrap();

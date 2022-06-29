@@ -1,12 +1,12 @@
 mod env;
 mod image;
-mod ty;
 mod piet_widget;
+mod ty;
 
 use piet_widget::PietViewWidget;
 
-use druid::widget::{Scroll, Split, RawLabel, Flex, Label, TextBox, Slider, Button};
-use druid::{Color, Size, AppLauncher, Data, Env, LensExt, Lens, Widget, WidgetExt, WindowDesc};
+use druid::widget::{Button, Flex, Label, RawLabel, Scroll, Slider, Split, TextBox};
+use druid::{AppLauncher, Color, Data, Env, Lens, LensExt, Size, Widget, WidgetExt, WindowDesc};
 use env::PietEnv;
 use wasm_bindgen::prelude::*;
 
@@ -19,7 +19,6 @@ mod macros {
     }
     pub(crate) use log;
 }
-
 
 const BACKGROUND: Color = Color::grey8(23);
 
@@ -65,10 +64,43 @@ fn build_root_widget() -> impl Widget<AppData> {
                 .background(BACKGROUND),
         );
 
-    let stack = Label::dynamic(|data, _| format!("{:?}", data))
-        .lens(AppData::env.then(PietEnv::stack))
-        .expand()
-        .padding(5.0);
+    let stack = Flex::column()
+        .with_flex_child(
+            Flex::row()
+                .with_flex_child(
+                    Label::dynamic(|data, _| format!("{:?}", data))
+                        .lens(AppData::env.then(PietEnv::cc))
+                        .expand(),
+                    1.0,
+                )
+                .with_flex_child(
+                    Label::dynamic(|data, _| format!("{:?}", data))
+                        .lens(AppData::env.then(PietEnv::dp))
+                        .expand(),
+                    1.0,
+                ),
+            1.0,
+        )
+        .with_flex_child(
+            Scroll::new(
+                Label::dynamic(|data, _| format!("{}", data))
+                    .lens(AppData::env.then(PietEnv::stack))
+                    .expand()
+                    .padding(5.0),
+            )
+            .vertical(),
+            1.0,
+        )
+        .with_flex_child(
+            Scroll::new(
+                Label::dynamic(|data, _| format!("{}", data))
+                    .lens(AppData::env.then(PietEnv::output))
+                    .expand()
+                    .padding(5.0),
+            )
+            .vertical(),
+            1.0,
+        );
 
     Split::columns(visual, stack)
 }
