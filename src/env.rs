@@ -100,7 +100,7 @@ pub struct PietEnv {
     /// image
     pub image: PietImg,
     /// How many times we've hit a flow restriction (black blocks & edges)
-    flow_restricted_count: usize,
+    pub flow_restricted_count: usize,
     /// Output
     pub output: String,
 }
@@ -226,7 +226,6 @@ impl PietEnv {
 
         if next_node_color == PietColor::Black {
             if self.flow_restricted_count >= 8 {
-                self.output.push_str("\nEXECUTION TERMINATED\n");
                 return;
             }
             if self.flow_restricted_count % 2 == 0 {
@@ -276,7 +275,10 @@ impl PietEnv {
                 let b = self.stack.pop().unwrap();
                 self.stack.push(a * b);
             }
-            _ => todo!(),
+            _ => {
+                self.output.push_str(format!("UNKNOWN OP: {:?}", op).as_str());
+                todo!()
+            }
         }
 
         self.cp = next_node.unwrap();

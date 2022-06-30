@@ -1,5 +1,5 @@
+use druid::{Data, Lens};
 use num_derive::FromPrimitive;
-use druid::{Lens, Data};
 
 #[derive(Data, Debug, Copy, Clone, PartialEq, FromPrimitive)]
 pub enum PietColor {
@@ -68,12 +68,33 @@ pub enum CodelChoser {
     Right,
 }
 
+impl std::fmt::Display for CodelChoser {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            CodelChoser::Left => write!(f, "⬅")?,
+            CodelChoser::Right => write!(f, "➡")?,
+        }
+        Ok(())
+    }
+}
+
 #[derive(Data, Debug, PartialEq, Clone, Copy)]
 pub enum DirectionPointer {
     Up,
     Down,
     Left,
     Right,
+}
+impl std::fmt::Display for DirectionPointer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            DirectionPointer::Left => write!(f, "⬅")?,
+            DirectionPointer::Right => write!(f, "➡")?,
+            DirectionPointer::Up => write!(f, "⬆")?,
+            DirectionPointer::Down => write!(f, "⬇")?,
+        }
+        Ok(())
+    }
 }
 
 #[derive(Data, PartialEq, Debug, Clone, Copy)]

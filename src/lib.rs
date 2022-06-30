@@ -68,15 +68,27 @@ fn build_root_widget() -> impl Widget<AppData> {
         .with_flex_child(
             Flex::row()
                 .with_flex_child(
-                    Label::dynamic(|data, _| format!("{:?}", data))
+                    Label::dynamic(|cc, _| format!("Codel Choser: {}", cc))
                         .lens(AppData::env.then(PietEnv::cc))
                         .expand(),
                     1.0,
                 )
                 .with_flex_child(
-                    Label::dynamic(|data, _| format!("{:?}", data))
+                    Label::dynamic(|dp, _| format!("Direction Pointer: {}", dp))
                         .lens(AppData::env.then(PietEnv::dp))
                         .expand(),
+                    1.0,
+                )
+                .with_flex_child(
+                    Label::dynamic(|frc, _| {
+                        if *frc >= 8 {
+                            format!("Execution Terminated")
+                        } else {
+                            format!("Flow Restriction Count: {}", frc)
+                        }
+                    })
+                    .lens(AppData::env.then(PietEnv::flow_restricted_count))
+                    .expand(),
                     1.0,
                 ),
             1.0,

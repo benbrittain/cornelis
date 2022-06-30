@@ -50,8 +50,8 @@ impl Widget<AppData> for PietViewWidget {
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &AppData, _env: &Env) {
         let size: Size = ctx.size();
-        let w0 = size.width / data.env.image.png_info.width as f64;
-        let h0 = size.height / data.env.image.png_info.height as f64;
+        let w0 = (size.width as u32 / data.env.image.png_info.width) as f64;
+        let h0 = (size.height as u32 / data.env.image.png_info.height) as f64;
         let cell_size = Size {
             width: w0,
             height: h0,
@@ -72,11 +72,13 @@ impl Widget<AppData> for PietViewWidget {
         }
 
         let point = Point {
-            x: w0 * data.env.cp.x as f64,
-            y: w0 * data.env.cp.y as f64,
+            x: (w0 as u32 * data.env.cp.x) as f64 + (w0 as u32 / 2) as f64,
+            y: (h0 as u32 * data.env.cp.y) as f64 + (h0 as u32 / 2) as f64,
         };
-        let rect = Rect::from_origin_size(point, cell_size * 0.8);
-        let color = Color::rgb8(0, 0, 0);
-        ctx.fill(rect, &color);
+        let radius = (w0 + h0) / 2.0;
+        let circle = druid::piet::kurbo::Circle::new(point, radius * 0.4);
+        ctx.fill(circle, &Color::rgb8(0x48, 0x1e, 0x40));
+        let inner_circle = druid::piet::kurbo::Circle::new(point, radius * 0.2);
+        ctx.fill(inner_circle, &Color::rgb8(0xff, 0xff, 0xff));
     }
 }
