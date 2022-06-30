@@ -68,15 +68,17 @@ fn build_root_widget() -> impl Widget<AppData> {
         .with_flex_child(
             Flex::row()
                 .with_flex_child(
-                    Label::dynamic(|cc, _| format!("Codel Choser: {}", cc))
+                    Label::dynamic(|cc, _| format!("Codel Choser\n{}", cc))
+                        .with_text_alignment(druid::TextAlignment::Center)
                         .lens(AppData::env.then(PietEnv::cc))
-                        .expand(),
+                    .background(Color::grey8(24)),
                     1.0,
                 )
                 .with_flex_child(
-                    Label::dynamic(|dp, _| format!("Direction Pointer: {}", dp))
+                    Label::dynamic(|dp, _| format!("Direction Pointer\n{}", dp))
+                        .with_text_alignment(druid::TextAlignment::Center)
                         .lens(AppData::env.then(PietEnv::dp))
-                        .expand(),
+                    .background(Color::grey8(28)),
                     1.0,
                 )
                 .with_flex_child(
@@ -84,11 +86,12 @@ fn build_root_widget() -> impl Widget<AppData> {
                         if *frc >= 8 {
                             format!("Execution Terminated")
                         } else {
-                            format!("Flow Restriction Count: {}", frc)
+                            format!("Flow Restriction Count\n{}", frc)
                         }
                     })
+                    .with_text_alignment(druid::TextAlignment::Center)
                     .lens(AppData::env.then(PietEnv::flow_restricted_count))
-                    .expand(),
+                    .background(Color::grey8(32)),
                     1.0,
                 ),
             1.0,
@@ -98,19 +101,19 @@ fn build_root_widget() -> impl Widget<AppData> {
                 Label::dynamic(|data, _| format!("{}", data))
                     .lens(AppData::env.then(PietEnv::stack))
                     .expand()
-                    .padding(5.0),
             )
-            .vertical(),
+            .vertical()
+            .background(Color::grey8(10)),
             1.0,
         )
         .with_flex_child(
             Scroll::new(
-                Label::dynamic(|data, _| format!("{}", data))
+                Label::dynamic(|data, _| format!("STDOUT\n\n{}", data))
                     .lens(AppData::env.then(PietEnv::output))
                     .expand()
-                    .padding(5.0),
             )
-            .vertical(),
+            .vertical()
+            .background(Color::grey8(20)),
             1.0,
         );
 

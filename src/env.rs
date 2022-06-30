@@ -80,8 +80,12 @@ impl druid::Data for Stack {
 
 impl std::fmt::Display for Stack {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        for (i, x) in self.0.iter().enumerate() {
-            write!(f, "{}:\t{:#02X}\n", i, x)?;
+        for (i, x) in self.0.iter().rev().enumerate() {
+            if u8::is_ascii(&(*x as u8)) {
+                write!(f, "{}:\t{:#02X} ({})\n", i, x, char::from_u32(*x).unwrap())?;
+            } else {
+                write!(f, "{}:\t{:#02X}\n", i, x)?;
+            }
         }
         Ok(())
     }
